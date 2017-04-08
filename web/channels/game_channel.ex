@@ -1,38 +1,10 @@
 defmodule BattleshipInterface.GameChannel do
   use BattleshipInterface.Web, :channel
 
-  alias BattleshipEngine.Game
+  alias BattleshipEngine.{GameSupervisor, Game}
 
   def join("game:"<>_player, _payload, socket) do
     {:ok, socket}
-  end
-
-  def handle_in("hello", payload, socket) do
-    # {:reply, {:ok, payload}, socket}
-    # {:reply, {:error, %{reason: "We force this error"}}, socket}
-    # push socket, "said_hello", payload
-    broadcast! socket, "said_hello", payload
-    {:noreply, socket}
-  end
-
-  def handle_in("new_game", _payload, socket) do
-    "game:"<>player = socket.topic
-    case Game.start_link(player) do
-      {:ok, _pid} ->
-        {:reply, :ok, socket}
-      {:error, reason} ->
-        {:reply, {:error, %{reason: inspect(reason)}}, socket}
-    end
-  end
-
-  def handle_in("add_player", player, socket) do
-    case Game.add_player({:global, socket.topic}, player) do
-      :ok ->
-        broadcast! socket, "player_added", %{message: "New player just joined: "<>player}
-        {:noreply, socket}
-      {:error, reason} ->
-        {:reply, {:error, %{reason: reason}}, socket}
-    end
   end
 
   def handle_in("set_ship_coordinates", payload, socket) do
@@ -46,12 +18,25 @@ defmodule BattleshipInterface.GameChannel do
     end
   end
 
-  def handle_in("set_ships", player, socket) do
+  def handle_in("set_ships", payload, socket) do
+    %{"player" => player} = payload
     player = String.to_atom(player)
     case Game.set_ships({:global, socket.topic}, player) do
       :ok ->
         broadcast! socket, "player_set_ships", %{player: player}
         {:noreply, socket}
+      :error ->
+        {:reply, :error, socket}
+    end
+  end
+
+  def handle_in("guess_coordinate", payload, socket) do
+    %{"player" => player, "coordinate" => coordinate} = payload
+    player = String.to_atom(player)
+    coordinate = String.to_atom(coordinate)
+    case Game.guess_coordinate({:global, socket.topic}, player, coordinate) do
+      {hit, ship, win} ->
+        {:reply, {:ok, %{hit: hit, ship: ship, win: win}}, socket}
       :error ->
         {:reply, :error, socket}
     end
